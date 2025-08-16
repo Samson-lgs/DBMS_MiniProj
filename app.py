@@ -62,7 +62,10 @@ if section == "Dashboard":
     st.title("📊 Customer Dashboard")
     df = fetch_customers()
     st.metric("Total Customers", len(df))
-    st.metric("Unique Products", df["product"].nunique())
+    if "product" in df.columns and not df.empty:
+        st.metric("Unique Products", df["product"].nunique())
+    else:
+        st.metric("Unique Products", 0)
     st.subheader("📁 All Customers")
     st.dataframe(df)
 
@@ -106,4 +109,5 @@ elif section == "Delete":
     if st.button("Delete"):
         delete_customer(selected_id)
         st.warning("⚠️ Customer deleted!")
+
 
