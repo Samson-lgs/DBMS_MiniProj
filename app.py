@@ -1,60 +1,108 @@
 import streamlit as st
+import pandas as pd
 import sqlite3
-from datetime import date
 
-conn = sqlite3.connect('ecommerce.db')
-c = conn.cursor()
+DB_PATH = "ecommerce.db"
 
-# Create tables if not exist
-c.execute('''CREATE TABLE IF NOT EXISTS Customers (
-    customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT, email TEXT, city TEXT)''')
+# --- Database Setup ---
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT,
+            product TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-c.execute('''CREATE TABLE IF NOT EXISTS Products (
-    product_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT, price REAL, stock INTEGER)''')
+def insert_customer(name, email, product):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO customers (name, email, product) VALUES (?, ?, ?)", (name, email, product))
+    conn.commit()
+    conn.close()
 
-c.execute('''CREATE TABLE IF NOT EXISTS Orders (
-    order_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    customer_id INTEGER, product_id INTEGER, quantity INTEGER, order_date DATE,
-    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id),
-    FOREIGN KEY (product_id) REFERENCES Products(product_id))''')
+def fetch_customers():
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM customers", conn)
+    conn.close()
+    return df
 
-st.title("🛍️ E-Commerce Management System")
+def delete_customer(customer_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
+    conn.commit()
+    conn.close()
 
-tab1, tab2, tab3 = st.tabs(["Add Customer", "Add Product", "Place Order"])
+def update_customer(customer_id, name, email, product):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE customers
+        SET name = ?, email = ?, product = ?
+        WHERE id = ?
+    """, (name, email, product, customer_id))
+    conn.commit()
+    conn.close()
 
-with tab1:
-    st.subheader("Add New Customer")
-    name = st.text_input("Name")
-    email = st.text_input("Email")
-    city = st.text_input("City")
-    if st.button("Add Customer"):
-        c.execute("INSERT INTO Customers (name, email, city) VALUES (?, ?, ?)", (name, email, city))
-        conn.commit()
-        st.success("Customer added!")
+# --- UI Setup ---
+st.set_page_config(page_title="Customer Management", layout="wide")
+init_db()
 
-with tab2:
-    st.subheader("Add New Product")
-    pname = st.text_input("Product Name")
-    price = st.number_input("Price", min_value=0.0)
-    stock = st.number_input("Stock", min_value=0)
-    if st.button("Add Product"):
-        c.execute("INSERT INTO Products (name, price, stock) VALUES (?, ?, ?)", (pname, price, stock))
-        conn.commit()
-        st.success("Product added!")
+st.sidebar.title("🔧 System Controls")
+section = st.sidebar.radio("Go to", ["Dashboard", "Add", "Update", "Delete"])
 
-with tab3:
-    st.subheader("Place Order")
-    customers = c.execute("SELECT customer_id, name FROM Customers").fetchall()
-    products = c.execute("SELECT product_id, name FROM Products").fetchall()
+# --- Dashboard ---
+if section == "Dashboard":
+    st.title("📊 Customer Dashboard")
+    df = fetch_customers()
+    st.metric("Total Customers", len(df))
+    st.metric("Unique Products", df["product"].nunique())
+    st.subheader("📁 All Customers")
+    st.dataframe(df)
 
-    cust = st.selectbox("Select Customer", customers, format_func=lambda x: f"{x[0]} - {x[1]}")
-    prod = st.selectbox("Select Product", products, format_func=lambda x: f"{x[0]} - {x[1]}")
-    qty = st.number_input("Quantity", min_value=1)
-    if st.button("Place Order"):
-        c.execute("INSERT INTO Orders (customer_id, product_id, quantity, order_date) VALUES (?, ?, ?, ?)",
-                  (cust[0], prod[0], qty, date.today()))
-        c.execute("UPDATE Products SET stock = stock - ? WHERE product_id = ?", (qty, prod[0]))
-        conn.commit()
-        st.success("Order placed!")
+# --- Add Customer ---
+elif section == "Add":
+    st.title("➕ Add New Customer")
+    with st.form("add_form"):
+        name = st.text_input("Name")
+        email = st.text_input("Email")
+        product = st.text_input("Product")
+        submitted = st.form_submit_button("Add")
+        if submitted:
+            insert_customer(name, email, product)
+            st.success("✅ Customer added!")
+
+# --- Update Customer ---
+elif section == "Update":
+    st.title("✏️ Update Customer")
+    df = fetch_customers()
+    customer_ids = df["id"].tolist()
+    selected_id = st.selectbox("Select Customer ID", customer_ids)
+    selected_row = df[df["id"] == selected_id].iloc[0]
+
+    with st.form("update_form"):
+        name = st.text_input("Name", selected_row["name"])
+        email = st.text_input("Email", selected_row["email"])
+        product = st.text_input("Product", selected_row["product"])
+        updated = st.form_submit_button("Update")
+        if updated:
+            update_customer(selected_id, name, email, product)
+            st.success("✅ Customer updated!")
+
+# --- Delete Customer ---
+elif section == "Delete":
+    st.title("🗑️ Delete Customer")
+    df = fetch_customers()
+    customer_ids = df["id"].tolist()
+    selected_id = st.selectbox("Select Customer ID to Delete", customer_ids)
+    selected_row = df[df["id"] == selected_id].iloc[0]
+    st.write(f"Name: {selected_row['name']}, Email: {selected_row['email']}, Product: {selected_row['product']}")
+    if st.button("Delete"):
+        delete_customer(selected_id)
+        st.warning("⚠️ Customer deleted!")
