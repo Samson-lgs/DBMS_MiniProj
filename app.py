@@ -106,3 +106,4 @@ elif section == "Delete":
     if st.button("Delete"):
         delete_customer(selected_id)
         st.warning("⚠️ Customer deleted!")
+
