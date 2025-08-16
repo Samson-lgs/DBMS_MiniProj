@@ -77,10 +77,16 @@ with tab1:
                 filtered = customers_df.query("email == @customer_email")
 
                 if not filtered.empty:
-                    st.session_state.customer_id = filtered.iloc[0]["id"]
+                    customers_df = get_customers()
+                    filtered = customers_df.query("email == @customer_email")
+                    if not filtered.empty and "id" in filtered.columns:
+                        st.session_state.customer_id = int(filtered.iloc[0]["id"])
+                        st.success(f"Logged in as {filtered.iloc[0]['name']}")
+                    else:
+                        st.error("Customer not found or missing ID column. Please check your input or database.")
                 else:
                     st.error("Customer not found after registration. Please try again.")
-                st.success(f"Registered and logged in as {customer_name}")
+                    st.success(f"Registered and logged in as {customer_name}")
             else:
                 st.error("Please enter your name to register.")
         else:
@@ -136,4 +142,5 @@ with tab4:
             st.success(f"✅ '{name}' added successfully!")
         else:
             st.error("Product name is required.")
+
 
